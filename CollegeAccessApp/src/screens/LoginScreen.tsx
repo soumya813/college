@@ -11,7 +11,6 @@ import {
   ScrollView,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
-import { UserRole } from '../types';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types';
@@ -21,7 +20,6 @@ type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Login'
 const LoginScreen = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [selectedRole, setSelectedRole] = useState<UserRole>('student');
   const [loading, setLoading] = useState(false);
   
   const { login } = useAuth();
@@ -34,41 +32,14 @@ const LoginScreen = () => {
     }
 
     setLoading(true);
-    const success = await login(email, password, selectedRole);
+    const success = await login(email, password);
     
-    if (success) {
-      // Navigation will be handled by the main App component based on user role
-      switch (selectedRole) {
-        case 'teacher':
-          navigation.navigate('TeacherTabs');
-          break;
-        case 'student':
-          navigation.navigate('StudentTabs');
-          break;
-        case 'guard':
-          navigation.navigate('GuardTabs');
-          break;
-      }
-    } else {
-      Alert.alert('Error', 'Invalid credentials');
+    if (!success) {
+      Alert.alert('Error', 'Invalid email or password');
     }
+    // Navigation will be handled automatically by the AuthContext
     
     setLoading(false);
-  };
-
-  const roleColors = {
-    student: '#4CAF50',
-    teacher: '#2196F3',
-    guard: '#FF9800',
-  };
-
-  const getDemoCredentials = () => {
-    const credentials = {
-      teacher: 'john.teacher@college.edu',
-      student: 'jane.student@college.edu',
-      guard: 'bob.guard@college.edu',
-    };
-    return credentials[selectedRole];
   };
 
   return (
@@ -83,27 +54,6 @@ const LoginScreen = () => {
         </View>
 
         <View style={styles.form}>
-          <Text style={styles.label}>Select Role</Text>
-          <View style={styles.roleContainer}>
-            {(['student', 'teacher', 'guard'] as UserRole[]).map((role) => (
-              <TouchableOpacity
-                key={role}
-                style={[
-                  styles.roleButton,
-                  { backgroundColor: selectedRole === role ? roleColors[role] : '#f0f0f0' }
-                ]}
-                onPress={() => setSelectedRole(role)}
-              >
-                <Text style={[
-                  styles.roleText,
-                  { color: selectedRole === role ? '#fff' : '#333' }
-                ]}>
-                  {role.charAt(0).toUpperCase() + role.slice(1)}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
           <Text style={styles.label}>Email</Text>
           <TextInput
             style={styles.input}
@@ -112,6 +62,7 @@ const LoginScreen = () => {
             placeholder="Enter your email"
             keyboardType="email-address"
             autoCapitalize="none"
+            editable={!loading}
           />
 
           <Text style={styles.label}>Password</Text>
@@ -121,10 +72,11 @@ const LoginScreen = () => {
             onChangeText={setPassword}
             placeholder="Enter your password"
             secureTextEntry
+            editable={!loading}
           />
 
           <TouchableOpacity
-            style={[styles.loginButton, { backgroundColor: roleColors[selectedRole] }]}
+            style={styles.loginButton}
             onPress={handleLogin}
             disabled={loading}
           >
@@ -134,9 +86,14 @@ const LoginScreen = () => {
           </TouchableOpacity>
 
           <View style={styles.demoInfo}>
-            <Text style={styles.demoTitle}>Demo Credentials:</Text>
-            <Text style={styles.demoText}>Email: {getDemoCredentials()}</Text>
-            <Text style={styles.demoText}>Password: password</Text>
+            <Text style={styles.demoTitle}>Demo Accounts:</Text>
+            <Text style={styles.demoText}>Teacher: john.doe@college.edu</Text>
+            <Text style={styles.demoText}>Student: jane.smith@college.edu</Text>
+            <Text style={styles.demoText}>Guard: bob.wilson@college.edu</Text>
+            <Text style={styles.demoText}>Password: password123</Text>
+            <Text style={styles.demoNote}>
+              Note: You'll need to set up Firebase and create these accounts
+            </Text>
           </View>
         </View>
       </ScrollView>
@@ -180,22 +137,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginTop: 16,
   },
-  roleContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  roleButton: {
-    flex: 1,
-    paddingVertical: 12,
-    marginHorizontal: 4,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  roleText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
   input: {
     borderWidth: 1,
     borderColor: '#ddd',
@@ -206,6 +147,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9f9f9',
   },
   loginButton: {
+    backgroundColor: '#2196F3',
     borderRadius: 8,
     paddingVertical: 16,
     alignItems: 'center',
@@ -226,11 +168,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#333',
-    marginBottom: 4,
+    marginBottom: 8,
   },
   demoText: {
     fontSize: 12,
     color: '#666',
+    marginBottom: 2,
+  },
+  demoNote: {
+    fontSize: 10,
+    color: '#999',
+    marginTop: 8,
+    fontStyle: 'italic',
   },
 });
 
