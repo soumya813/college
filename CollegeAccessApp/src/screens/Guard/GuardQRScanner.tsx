@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,8 +8,11 @@ import {
   ScrollView,
   TextInput,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../../context/AuthContext';
+import { accessEntryService, AccessEntry, AccessEntryInput } from '../../services/accessEntryService';
 
 interface ScannedEntry {
   id: string;
@@ -22,67 +25,142 @@ interface ScannedEntry {
 }
 
 const GuardQRScanner = () => {
+  const { user } = useAuth();
   const [manualEntryMode, setManualEntryMode] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [entryForm, setEntryForm] = useState({
     name: '',
     role: 'student' as 'student' | 'teacher',
     type: 'in' as 'in' | 'out',
     idNumber: '',
+    notes: '',
   });
-  const [todayEntries, setTodayEntries] = useState<ScannedEntry[]>([
-    // Mock data for demo
-    {
-      id: '1',
-      name: 'Jane Smith',
-      role: 'student',
-      time: new Date(2024, 10, 19, 9, 15),
-      type: 'in',
-      enrollmentNumber: 'S001',
-    },
-    {
-      id: '2',
-      name: 'John Doe',
-      role: 'teacher',
-      time: new Date(2024, 10, 19, 8, 30),
-      type: 'in',
-      employeeId: 'T001',
-    },
-  ]);
+  const [todayEntries, setTodayEntries] = useState<AccessEntry[]>([]);
+  const [stats, setStats] = useState({
+    totalEntries: 0,
+    studentsIn: 0,
+    teachersIn: 0,
+    studentsOut: 0,
+    teachersOut: 0,
+  });
 
-  const handleManualEntry = () => {
-    if (!entryForm.name || !entryForm.idNumber) {
+  useEffect(() => {
+    if (!user) return;
+
+    setLoading(true);
+    
+    // Subscribe to real-time updates
+    const unsubscribe = accessEntryService.subscribeToTodayEntries((entries) => {
+      setTodayEntries(entries);
+      setLoading(false);
+    });
+
+    // Load statistics
+    loadStats();
+
+    return unsubscribe;
+  }, [user]);
+
+  const loadStats = async () => {
+    try {
+      const todayStats = await accessEntryService.getTodayStats();
+      setStats(todayStats);
+    } catch (error) {
+      console.error('Error loading stats:', error);
+    }
+  };
+
+  const handleManualEntry = async () => {
+    if (!entryForm.name.trim() || !entryForm.idNumber.trim()) {
       Alert.alert('Missing Information', 'Please fill in all required fields.');
       return;
     }
 
-    const newEntry: ScannedEntry = {
-      id: Date.now().toString(),
+    if (!user) {
+      Alert.alert('Error', 'User information not available.');
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      // Check current status of the person
+      const currentStatus = await accessEntryService.getPersonStatus(entryForm.idNumber, entryForm.role);
+      
+      // Warn if trying to check in someone who is already in
+      if (entryForm.type === 'in' && currentStatus === 'in') {
+        Alert.alert(
+          'Already Checked In',
+          `${entryForm.name} appears to already be checked in. Continue anyway?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Continue', onPress: () => submitEntry() }
+          ]
+        );
+        return;
+      }
+
+      // Warn if trying to check out someone who is already out
+      if (entryForm.type === 'out' && (currentStatus === 'out' || currentStatus === 'unknown')) {
+        Alert.alert(
+          'Not Checked In',
+          `${entryForm.name} doesn't appear to be checked in. Continue anyway?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Continue', onPress: () => submitEntry() }
+          ]
+        );
+        return;
+      }
+
+      await submitEntry();
+    } catch (error) {
+      console.error('Error processing manual entry:', error);
+      Alert.alert('Error', 'Failed to process entry. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const submitEntry = async () => {
+    if (!user) return;
+
+    const entryData: AccessEntryInput = {
       name: entryForm.name,
       role: entryForm.role,
-      time: new Date(),
       type: entryForm.type,
-      ...(entryForm.role === 'student' 
-        ? { enrollmentNumber: entryForm.idNumber }
-        : { employeeId: entryForm.idNumber }
-      ),
+      idNumber: entryForm.idNumber,
+      notes: entryForm.notes,
     };
-    
-    setTodayEntries(prev => [newEntry, ...prev]);
-    
-    Alert.alert(
-      'Entry Recorded',
-      `${entryForm.name} has been marked as ${entryForm.type.toUpperCase()} at ${newEntry.time.toLocaleTimeString()}`,
-      [{ text: 'OK' }]
-    );
 
-    // Reset form
-    setEntryForm({
-      name: '',
-      role: 'student',
-      type: 'in',
-      idNumber: '',
+    const success = await accessEntryService.createEntry(entryData, {
+      id: user.id,
+      name: user.name,
     });
-    setManualEntryMode(false);
+
+    if (success) {
+      Alert.alert(
+        'Entry Recorded',
+        `${entryForm.name} has been marked as ${entryForm.type.toUpperCase()} at ${new Date().toLocaleTimeString()}`,
+        [{ text: 'OK' }]
+      );
+
+      // Reset form and close modal
+      setEntryForm({
+        name: '',
+        role: 'student',
+        type: 'in',
+        idNumber: '',
+        notes: '',
+      });
+      setManualEntryMode(false);
+      
+      // Refresh stats
+      loadStats();
+    } else {
+      Alert.alert('Error', 'Failed to record entry. Please try again.');
+    }
   };
 
   const formatTime = (date: Date) => {
@@ -101,15 +179,20 @@ const GuardQRScanner = () => {
     return type === 'in' ? '#4CAF50' : '#FF9800';
   };
 
-  const getRoleIcon = (role: 'student' | 'teacher') => {
-    return role === 'student' ? 'school-outline' : 'person-outline';
+  const getRoleIcon = (role: 'student' | 'teacher' | 'guard') => {
+    if (role === 'student') return 'school-outline';
+    if (role === 'teacher') return 'person-outline';
+    return 'shield-outline'; // for guard
   };
 
-  const todayStats = {
-    totalEntries: todayEntries.length,
-    studentsIn: todayEntries.filter(e => e.role === 'student' && e.type === 'in').length,
-    teachersIn: todayEntries.filter(e => e.role === 'teacher' && e.type === 'in').length,
-  };
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color="#2196F3" />
+        <Text style={styles.loadingText}>Loading entries...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -121,15 +204,15 @@ const GuardQRScanner = () => {
 
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
-            <Text style={styles.statValue}>{todayStats.totalEntries}</Text>
+            <Text style={styles.statValue}>{stats.totalEntries}</Text>
             <Text style={styles.statLabel}>Total Entries</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statValue}>{todayStats.studentsIn}</Text>
+            <Text style={styles.statValue}>{stats.studentsIn}</Text>
             <Text style={styles.statLabel}>Students In</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statValue}>{todayStats.teachersIn}</Text>
+            <Text style={styles.statValue}>{stats.teachersIn}</Text>
             <Text style={styles.statLabel}>Teachers In</Text>
           </View>
         </View>
@@ -168,12 +251,140 @@ const GuardQRScanner = () => {
                     />
                     <Text style={styles.statusText}>{entry.type.toUpperCase()}</Text>
                   </View>
-                  <Text style={styles.entryTime}>{formatTime(entry.time)}</Text>
+                  <Text style={styles.entryTime}>
+                    {formatTime(entry.timestamp)}
+                  </Text>
                 </View>
               </View>
             ))}
           </View>
         </ScrollView>
+
+      {/* Manual Entry Modal */}
+      <Modal
+        visible={manualEntryMode}
+        animationType="slide"
+        presentationStyle="formSheet"
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Manual Entry</Text>
+            <TouchableOpacity 
+              onPress={() => setManualEntryMode(false)}
+              disabled={submitting}
+            >
+              <Ionicons name="close" size={24} color="#666" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.modalContent}>
+            <View style={styles.form}>
+              <Text style={styles.label}>Name *</Text>
+              <TextInput
+                style={styles.input}
+                value={entryForm.name}
+                onChangeText={(text) => setEntryForm(prev => ({ ...prev, name: text }))}
+                placeholder="Enter full name"
+                editable={!submitting}
+              />
+
+              <Text style={styles.label}>Role *</Text>
+              <View style={styles.roleButtons}>
+                <TouchableOpacity
+                  style={[
+                    styles.roleButton,
+                    entryForm.role === 'student' && styles.roleButtonActive
+                  ]}
+                  onPress={() => setEntryForm(prev => ({ ...prev, role: 'student' }))}
+                  disabled={submitting}
+                >
+                  <Text style={[
+                    styles.roleButtonText,
+                    entryForm.role === 'student' && styles.roleButtonTextActive
+                  ]}>Student</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.roleButton,
+                    entryForm.role === 'teacher' && styles.roleButtonActive
+                  ]}
+                  onPress={() => setEntryForm(prev => ({ ...prev, role: 'teacher' }))}
+                  disabled={submitting}
+                >
+                  <Text style={[
+                    styles.roleButtonText,
+                    entryForm.role === 'teacher' && styles.roleButtonTextActive
+                  ]}>Teacher</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.label}>
+                {entryForm.role === 'student' ? 'Enrollment Number *' : 'Employee ID *'}
+              </Text>
+              <TextInput
+                style={styles.input}
+                value={entryForm.idNumber}
+                onChangeText={(text) => setEntryForm(prev => ({ ...prev, idNumber: text }))}
+                placeholder={entryForm.role === 'student' ? 'Enter enrollment number' : 'Enter employee ID'}
+                editable={!submitting}
+              />
+
+              <Text style={styles.label}>Entry Type *</Text>
+              <View style={styles.roleButtons}>
+                <TouchableOpacity
+                  style={[
+                    styles.roleButton,
+                    entryForm.type === 'in' && styles.roleButtonActive
+                  ]}
+                  onPress={() => setEntryForm(prev => ({ ...prev, type: 'in' }))}
+                  disabled={submitting}
+                >
+                  <Text style={[
+                    styles.roleButtonText,
+                    entryForm.type === 'in' && styles.roleButtonTextActive
+                  ]}>Check In</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.roleButton,
+                    entryForm.type === 'out' && styles.roleButtonActive
+                  ]}
+                  onPress={() => setEntryForm(prev => ({ ...prev, type: 'out' }))}
+                  disabled={submitting}
+                >
+                  <Text style={[
+                    styles.roleButtonText,
+                    entryForm.type === 'out' && styles.roleButtonTextActive
+                  ]}>Check Out</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.label}>Notes (Optional)</Text>
+              <TextInput
+                style={[styles.input, styles.notesInput]}
+                value={entryForm.notes}
+                onChangeText={(text) => setEntryForm(prev => ({ ...prev, notes: text }))}
+                placeholder="Add any additional notes..."
+                multiline
+                numberOfLines={3}
+                editable={!submitting}
+              />
+
+              <TouchableOpacity 
+                style={[styles.submitButton, submitting && styles.submitButtonDisabled]} 
+                onPress={handleManualEntry}
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.submitButtonText}>Record Entry</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -357,6 +568,101 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     textAlign: 'center',
+  },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 10,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    backgroundColor: '#f8f9fa',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  modalContent: {
+    flex: 1,
+  },
+  form: {
+    padding: 20,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+    marginTop: 16,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    backgroundColor: '#f9f9f9',
+  },
+  notesInput: {
+    height: 80,
+    textAlignVertical: 'top',
+  },
+  roleButtons: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  roleButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    alignItems: 'center',
+    backgroundColor: '#f9f9f9',
+  },
+  roleButtonActive: {
+    backgroundColor: '#2196F3',
+    borderColor: '#2196F3',
+  },
+  roleButtonText: {
+    fontSize: 16,
+    color: '#666',
+    fontWeight: '500',
+  },
+  roleButtonTextActive: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  submitButton: {
+    backgroundColor: '#4CAF50',
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 30,
+    justifyContent: 'center',
+    minHeight: 50,
+  },
+  submitButtonDisabled: {
+    backgroundColor: '#ccc',
+  },
+  submitButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 });
 

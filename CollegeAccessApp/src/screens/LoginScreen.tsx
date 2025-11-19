@@ -14,7 +14,6 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types';
-import { createTestUsers } from '../utils/testHelpers';
 
 type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Login'>;
 
@@ -64,34 +63,6 @@ const LoginScreen = () => {
     }
   };
 
-  const handleCreateTestUsers = async () => {
-    setLoading(true);
-    try {
-      Alert.alert(
-        'Create Test Users',
-        'This will create test accounts for development. Continue?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Create',
-            onPress: async () => {
-              const results = await createTestUsers();
-              const successCount = results.filter(r => r.success).length;
-              const failCount = results.filter(r => !r.success).length;
-              
-              Alert.alert(
-                'Test Users Creation',
-                `Created: ${successCount}\nFailed: ${failCount}\n\nCheck console for details.`
-              );
-            }
-          }
-        ]
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <KeyboardAvoidingView 
       style={styles.container}
@@ -135,60 +106,13 @@ const LoginScreen = () => {
             </Text>
           </TouchableOpacity>
 
-          {/* Test Login Buttons for Development */}
-          <View style={styles.testSection}>
-            <Text style={styles.testTitle}>Test Accounts (Development)</Text>
-            
-            <TouchableOpacity
-              style={styles.testButton}
-              onPress={() => {
-                setEmail('student@test.com');
-                setPassword('test123');
-              }}
-              disabled={loading}
-            >
-              <Text style={styles.testButtonText}>Fill Student Test Account</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.testButton}
-              onPress={() => {
-                setEmail('teacher@test.com');
-                setPassword('test123');
-              }}
-              disabled={loading}
-            >
-              <Text style={styles.testButtonText}>Fill Teacher Test Account</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.testButton}
-              onPress={() => {
-                setEmail('guard@test.com');
-                setPassword('test123');
-              }}
-              disabled={loading}
-            >
-              <Text style={styles.testButtonText}>Fill Guard Test Account</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.testButton, { backgroundColor: '#28a745' }]}
-              onPress={handleCreateTestUsers}
-              disabled={loading}
-            >
-              <Text style={styles.testButtonText}>Create Test Users in Firebase</Text>
-            </TouchableOpacity>
-          </View>
-
           <View style={styles.demoInfo}>
-            <Text style={styles.demoTitle}>Demo Accounts:</Text>
-            <Text style={styles.demoText}>Teacher: john.doe@college.edu</Text>
-            <Text style={styles.demoText}>Student: jane.smith@college.edu</Text>
-            <Text style={styles.demoText}>Guard: bob.wilson@college.edu</Text>
-            <Text style={styles.demoText}>Password: password123</Text>
+            <Text style={styles.demoTitle}>Demo Accounts</Text>
+            <Text style={styles.demoText}>Student: student@test.com / test123</Text>
+            <Text style={styles.demoText}>Teacher: teacher@test.com / test123</Text>
+            <Text style={styles.demoText}>Guard: guard@test.com / test123</Text>
             <Text style={styles.demoNote}>
-              Note: You'll need to set up Firebase and create these accounts
+              For development and testing purposes only
             </Text>
           </View>
         </View>
@@ -276,34 +200,6 @@ const styles = StyleSheet.create({
     color: '#999',
     marginTop: 8,
     fontStyle: 'italic',
-  },
-  testSection: {
-    marginTop: 30,
-    padding: 16,
-    backgroundColor: '#f8f9fa',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e9ecef',
-  },
-  testTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  testButton: {
-    backgroundColor: '#6c757d',
-    borderRadius: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    marginVertical: 4,
-  },
-  testButtonText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '500',
   },
 });
 
