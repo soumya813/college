@@ -14,6 +14,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types';
+import { createTestUsers } from '../utils/testHelpers';
 
 type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Login'>;
 
@@ -26,20 +27,69 @@ const LoginScreen = () => {
   const navigation = useNavigation<LoginScreenNavigationProp>();
 
   const handleLogin = async () => {
-    if (!email || !password) {
+    if (!email.trim() || !password.trim()) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
 
-    setLoading(true);
-    const success = await login(email, password);
-    
-    if (!success) {
-      Alert.alert('Error', 'Invalid email or password');
+    if (!email.includes('@')) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return;
     }
-    // Navigation will be handled automatically by the AuthContext
+
+    setLoading(true);
     
-    setLoading(false);
+    try {
+      console.log('Starting login process...');
+      const success = await login(email.trim(), password);
+      
+      if (!success) {
+        Alert.alert(
+          'Login Failed', 
+          'Check the console for detailed error information. Common issues:\n\n' +
+          '• User account may not exist\n' +
+          '• Incorrect password\n' +
+          '• Firestore permissions\n' +
+          '• Network connectivity\n\n' +
+          'Try creating test users first or check Firebase Console.'
+        );
+      } else {
+        console.log('Login successful!');
+      }
+    } catch (error) {
+      console.error('Login error in component:', error);
+      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateTestUsers = async () => {
+    setLoading(true);
+    try {
+      Alert.alert(
+        'Create Test Users',
+        'This will create test accounts for development. Continue?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Create',
+            onPress: async () => {
+              const results = await createTestUsers();
+              const successCount = results.filter(r => r.success).length;
+              const failCount = results.filter(r => !r.success).length;
+              
+              Alert.alert(
+                'Test Users Creation',
+                `Created: ${successCount}\nFailed: ${failCount}\n\nCheck console for details.`
+              );
+            }
+          }
+        ]
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -84,6 +134,52 @@ const LoginScreen = () => {
               {loading ? 'Logging in...' : 'Login'}
             </Text>
           </TouchableOpacity>
+
+          {/* Test Login Buttons for Development */}
+          <View style={styles.testSection}>
+            <Text style={styles.testTitle}>Test Accounts (Development)</Text>
+            
+            <TouchableOpacity
+              style={styles.testButton}
+              onPress={() => {
+                setEmail('student@test.com');
+                setPassword('test123');
+              }}
+              disabled={loading}
+            >
+              <Text style={styles.testButtonText}>Fill Student Test Account</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.testButton}
+              onPress={() => {
+                setEmail('teacher@test.com');
+                setPassword('test123');
+              }}
+              disabled={loading}
+            >
+              <Text style={styles.testButtonText}>Fill Teacher Test Account</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.testButton}
+              onPress={() => {
+                setEmail('guard@test.com');
+                setPassword('test123');
+              }}
+              disabled={loading}
+            >
+              <Text style={styles.testButtonText}>Fill Guard Test Account</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.testButton, { backgroundColor: '#28a745' }]}
+              onPress={handleCreateTestUsers}
+              disabled={loading}
+            >
+              <Text style={styles.testButtonText}>Create Test Users in Firebase</Text>
+            </TouchableOpacity>
+          </View>
 
           <View style={styles.demoInfo}>
             <Text style={styles.demoTitle}>Demo Accounts:</Text>
@@ -180,6 +276,34 @@ const styles = StyleSheet.create({
     color: '#999',
     marginTop: 8,
     fontStyle: 'italic',
+  },
+  testSection: {
+    marginTop: 30,
+    padding: 16,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  testTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  testButton: {
+    backgroundColor: '#6c757d',
+    borderRadius: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    marginVertical: 4,
+  },
+  testButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '500',
   },
 });
 

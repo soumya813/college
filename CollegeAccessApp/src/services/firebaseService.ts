@@ -6,6 +6,7 @@ import {
   deleteDoc,
   getDoc,
   getDocs,
+  setDoc,
   query,
   where,
   orderBy,
@@ -19,7 +20,7 @@ import { User, AttendanceRecord, Assignment, Class, Notification } from '../type
 export const createUser = async (userData: User) => {
   try {
     const userDoc = doc(db, 'users', userData.id);
-    await updateDoc(userDoc, userData);
+    await setDoc(userDoc, userData);
     return true;
   } catch (error) {
     console.error('Error creating user:', error);

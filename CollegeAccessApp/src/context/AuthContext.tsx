@@ -66,22 +66,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
+      console.log('Attempting login for:', email);
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const firebaseUser = userCredential.user;
+      console.log('Firebase login successful for user:', firebaseUser.uid);
       
       // Fetch user data from Firestore
       const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
       if (userDoc.exists()) {
         const userData = userDoc.data() as User;
         setUser({ ...userData, id: firebaseUser.uid });
+        console.log('User data loaded successfully:', userData.role);
         return true;
       } else {
-        console.error('User data not found in Firestore');
+        console.error('User data not found in Firestore for UID:', firebaseUser.uid);
+        console.log('This means the user exists in Authentication but not in Firestore database');
         await signOut(auth);
         return false;
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login error:', error);
+      console.error('Error code:', error.code);
+      console.error('Error message:', error.message);
+      
+      if (error.code === 'auth/invalid-credential') {
+        console.log('🔴 Invalid credentials - user may not exist or password is wrong');
+      } else if (error.code === 'auth/user-not-found') {
+        console.log('🔴 User not found - need to create this user first');
+      } else if (error.code === 'auth/wrong-password') {
+        console.log('🔴 Wrong password');
+      } else if (error.code === 'auth/too-many-requests') {
+        console.log('🔴 Too many failed attempts - try again later');
+      }
+      
       return false;
     }
   };

@@ -13,10 +13,10 @@ const TeacherDashboard = () => {
   const { user, logout } = useAuth();
 
   const quickStats = [
-    { title: 'Classes Today', value: '4', icon: 'school-outline', color: '#2196F3' },
-    { title: 'Students Present', value: '85', icon: 'people-outline', color: '#4CAF50' },
-    { title: 'Assignments Due', value: '3', icon: 'document-text-outline', color: '#FF9800' },
-    { title: 'Notifications', value: '7', icon: 'notifications-outline', color: '#9C27B0' },
+    { title: 'Classes Today', value: '4', icon: 'school-outline' as any, color: '#2196F3' },
+    { title: 'Students Present', value: '85', icon: 'people-outline' as any, color: '#4CAF50' },
+    { title: 'Assignments Due', value: '3', icon: 'document-text-outline' as any, color: '#FF9800' },
+    { title: 'Notifications', value: '7', icon: 'notifications-outline' as any, color: '#9C27B0' },
   ];
 
   const todayClasses = [

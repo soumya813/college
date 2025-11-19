@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,9 +6,9 @@ import {
   Alert,
   TouchableOpacity,
   ScrollView,
+  TextInput,
+  Modal,
 } from 'react-native';
-import { Camera } from 'expo-camera';
-import { BarCodeScanner } from 'expo-barcode-scanner';
 import { Ionicons } from '@expo/vector-icons';
 
 interface ScannedEntry {
@@ -22,9 +22,13 @@ interface ScannedEntry {
 }
 
 const GuardQRScanner = () => {
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const [scanned, setScanned] = useState(false);
-  const [scannerActive, setScannerActive] = useState(false);
+  const [manualEntryMode, setManualEntryMode] = useState(false);
+  const [entryForm, setEntryForm] = useState({
+    name: '',
+    role: 'student' as 'student' | 'teacher',
+    type: 'in' as 'in' | 'out',
+    idNumber: '',
+  });
   const [todayEntries, setTodayEntries] = useState<ScannedEntry[]>([
     // Mock data for demo
     {
@@ -45,59 +49,40 @@ const GuardQRScanner = () => {
     },
   ]);
 
-  useEffect(() => {
-    const getBarCodeScannerPermissions = async () => {
-      const { status } = await BarCodeScanner.requestPermissionsAsync();
-      setHasPermission(status === 'granted');
-    };
-
-    getBarCodeScannerPermissions();
-  }, []);
-
-  const handleBarCodeScanned = ({ type, data }: { type: string; data: string }) => {
-    setScanned(true);
-    setScannerActive(false);
-    
-    try {
-      // Parse the QR code data (expecting JSON format)
-      const qrData = JSON.parse(data);
-      
-      if (qrData.userId && qrData.name && qrData.role) {
-        const newEntry: ScannedEntry = {
-          id: Date.now().toString(),
-          name: qrData.name,
-          role: qrData.role,
-          time: new Date(),
-          type: qrData.type || 'in', // Default to 'in' if not specified
-          enrollmentNumber: qrData.enrollmentNumber,
-          employeeId: qrData.employeeId,
-        };
-        
-        setTodayEntries(prev => [newEntry, ...prev]);
-        
-        Alert.alert(
-          'Entry Recorded',
-          `${qrData.name} has been marked as ${newEntry.type.toUpperCase()} at ${newEntry.time.toLocaleTimeString()}`,
-          [{ text: 'OK', onPress: () => setScanned(false) }]
-        );
-      } else {
-        Alert.alert('Invalid QR Code', 'The scanned QR code is not valid for access control.');
-        setScanned(false);
-      }
-    } catch (error) {
-      Alert.alert('Invalid QR Code', 'The scanned QR code format is not recognized.');
-      setScanned(false);
+  const handleManualEntry = () => {
+    if (!entryForm.name || !entryForm.idNumber) {
+      Alert.alert('Missing Information', 'Please fill in all required fields.');
+      return;
     }
-  };
 
-  const startScanning = () => {
-    setScannerActive(true);
-    setScanned(false);
-  };
+    const newEntry: ScannedEntry = {
+      id: Date.now().toString(),
+      name: entryForm.name,
+      role: entryForm.role,
+      time: new Date(),
+      type: entryForm.type,
+      ...(entryForm.role === 'student' 
+        ? { enrollmentNumber: entryForm.idNumber }
+        : { employeeId: entryForm.idNumber }
+      ),
+    };
+    
+    setTodayEntries(prev => [newEntry, ...prev]);
+    
+    Alert.alert(
+      'Entry Recorded',
+      `${entryForm.name} has been marked as ${entryForm.type.toUpperCase()} at ${newEntry.time.toLocaleTimeString()}`,
+      [{ text: 'OK' }]
+    );
 
-  const stopScanning = () => {
-    setScannerActive(false);
-    setScanned(false);
+    // Reset form
+    setEntryForm({
+      name: '',
+      role: 'student',
+      type: 'in',
+      idNumber: '',
+    });
+    setManualEntryMode(false);
   };
 
   const formatTime = (date: Date) => {
@@ -126,67 +111,36 @@ const GuardQRScanner = () => {
     teachersIn: todayEntries.filter(e => e.role === 'teacher' && e.type === 'in').length,
   };
 
-  if (hasPermission === null) {
-    return (
-      <View style={styles.container}>
-        <Text>Requesting camera permission...</Text>
-      </View>
-    );
-  }
-
-  if (hasPermission === false) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.noPermissionText}>No access to camera</Text>
-        <Text style={styles.noPermissionSubtext}>
-          Camera permission is required to scan QR codes
-        </Text>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
-      {scannerActive ? (
-        <View style={styles.scannerContainer}>
-          <BarCodeScanner
-            onBarCodeScanned={scanned ? undefined : handleBarCodeScanned}
-            style={StyleSheet.absoluteFillObject}
-          />
-          <View style={styles.scannerOverlay}>
-            <View style={styles.scannerFrame} />
-            <Text style={styles.scannerText}>Position QR code within the frame</Text>
-            <TouchableOpacity style={styles.stopButton} onPress={stopScanning}>
-              <Text style={styles.stopButtonText}>Stop Scanning</Text>
-            </TouchableOpacity>
+      <ScrollView style={styles.content}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Access Control</Text>
+          <Text style={styles.subtitle}>Manual entry tracking (QR scanner temporarily disabled)</Text>
+        </View>
+
+        <View style={styles.statsContainer}>
+          <View style={styles.statCard}>
+            <Text style={styles.statValue}>{todayStats.totalEntries}</Text>
+            <Text style={styles.statLabel}>Total Entries</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statValue}>{todayStats.studentsIn}</Text>
+            <Text style={styles.statLabel}>Students In</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statValue}>{todayStats.teachersIn}</Text>
+            <Text style={styles.statLabel}>Teachers In</Text>
           </View>
         </View>
-      ) : (
-        <ScrollView style={styles.content}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Access Control</Text>
-            <Text style={styles.subtitle}>Scan QR codes for entry/exit tracking</Text>
-          </View>
 
-          <View style={styles.statsContainer}>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>{todayStats.totalEntries}</Text>
-              <Text style={styles.statLabel}>Total Entries</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>{todayStats.studentsIn}</Text>
-              <Text style={styles.statLabel}>Students In</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>{todayStats.teachersIn}</Text>
-              <Text style={styles.statLabel}>Teachers In</Text>
-            </View>
-          </View>
-
-          <TouchableOpacity style={styles.scanButton} onPress={startScanning}>
-            <Ionicons name="qr-code-outline" size={32} color="#fff" />
-            <Text style={styles.scanButtonText}>Start QR Scanning</Text>
-          </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.scanButton} 
+          onPress={() => setManualEntryMode(true)}
+        >
+          <Ionicons name="add-circle-outline" size={32} color="#fff" />
+          <Text style={styles.scanButtonText}>Manual Entry</Text>
+        </TouchableOpacity>
 
           <View style={styles.entriesSection}>
             <Text style={styles.sectionTitle}>Today's Entries</Text>
@@ -220,7 +174,6 @@ const GuardQRScanner = () => {
             ))}
           </View>
         </ScrollView>
-      )}
     </View>
   );
 };
